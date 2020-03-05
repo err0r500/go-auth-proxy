@@ -1,0 +1,7 @@
+{
+  "realm" : "master",
+  "auth-server-url" : "http://localhost:2000/auth",
+  "ssl-required" : "external",
+  "resource" : "auth_code",
+  "public-client" : true
+}

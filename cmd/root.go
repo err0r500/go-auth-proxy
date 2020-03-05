@@ -17,8 +17,15 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
+	"log"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
+	"regexp"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -38,7 +45,48 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
+	Run: func(cmd *cobra.Command, args []string) {
+		run()
+	},
+}
+
+func run() {
+	keyCloakURL, err := url.Parse("http://keycloak:8080")
+	if err != nil {
+		log.Fatal(err)
+	}
+	echoURL, err := url.Parse("http://echo:5678")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	r := mux.NewRouter()
+	r.MatcherFunc(func(r *http.Request, rm *mux.RouteMatch) bool {
+		match, _ := regexp.MatchString(".*/token", r.URL.Path)
+		return match
+	}).HandlerFunc(handlerToken(httputil.NewSingleHostReverseProxy(keyCloakURL)))
+
+	r.PathPrefix("/auth/").HandlerFunc(handler(httputil.NewSingleHostReverseProxy(keyCloakURL)))
+	r.PathPrefix("/").HandlerFunc(handler(httputil.NewSingleHostReverseProxy(echoURL)))
+	http.Handle("/", r)
+
+	err = http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func handlerToken(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("token")
+		p.ServeHTTP(w, r)
+	}
+}
+
+func handler(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p.ServeHTTP(w, r)
+	}
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
